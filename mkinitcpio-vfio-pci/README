@@ -1,0 +1,7 @@
+This is for arch/manjaro. It adds a mkinitcpio hook that parses the kernel cmdline to bind devices to vfio-pci in early boot (so the other drivers don't have a chance to mess up the state of the hardware).
+
+The cmdline should have something like this, where the numbers are pci ids from lspci:
+    vfio-pci.pci-ids=06:00.0,06:00.1,09:00.0
+
+Unlike pci-stub, it uses pci id, not vendor:device id, so that way it is unique, but possibly unpredictable sometimes, eg. kernel acs quirks updates. I created it because I have multiple of the same card, and one is in the kvm host.
+

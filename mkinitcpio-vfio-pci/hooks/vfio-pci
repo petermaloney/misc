@@ -1,0 +1,78 @@
+#!/usr/bin/ash
+#
+# usr/bin/ash -> busybox
+#
+# test with:
+#     mkdir /tmp/cpio; cd /tmp/cpio
+#     gunzip -c /boot/initramfs-4.1.6-1-grsec-kvm-host-x86_64.img | cpio -iv
+#     for d in dev proc sys; do mount -o bind /$d /tmp/cpio/$d; done
+#     chroot /tmp/cpio/ ash
+
+# vfio-pci doesn't bind if it isn't unbound, so it is slightly better than pci-stub
+# also we want it to be bound to vfio-pci in the end, so this is one less step
+# but it will still bind to unbound things not in our list
+# so we just unbind those later, and then it should work
+run_hook() {
+    modprobe vfio-pci 2>/dev/null
+
+    # get pci-ids from kernel command line (pci-ids was created for this hook)
+    local pci_ids=$(grep -Eo "vfio-pci.pci-ids=[^ ]+" /proc/cmdline | sed -r 's|vfio-pci.pci-ids=([^ ]+)|\1|')
+
+    local IFS=$'\n'
+    local pci_id=
+
+    # first unbind things that we're sure we want to bind
+    for pci_id in $(echo "$pci_ids" | sed -r "s|,|\n|g"); do
+        if [ "${pci_id:0:5}" != "0000:" ]; then
+            pci_id="0000:$pci_id"
+        fi
+        if [ ! -e /sys/bus/pci/devices/"$pci_id"/driver ]; then
+            continue
+        fi
+        olddriver=$(basename "$(readlink -f /sys/bus/pci/devices/"$pci_id"/driver)")
+        echo "vfio-pci hook - unbinding $pci_id which was $olddriver"
+        echo "$pci_id" > /sys/bus/pci/devices/"$pci_id"/driver/unbind
+    done
+
+    # then bind them with vfio (which also binds unbound things we don't want)
+    for pci_id in $(echo "$pci_ids" | sed -r "s|,|\n|g"); do
+        if [ "${pci_id:0:5}" != "0000:" ]; then
+            pci_id="0000:$pci_id"
+        fi
+        echo "vfio-pci hook - start bind of $pci_id"
+        for dev in /sys/bus/pci/devices/"$pci_id"/iommu_group/devices/*; do
+            dev=$(basename "$dev")
+            echo "vfio-pci hook - found dev $dev"
+            vendor=$(cat /sys/bus/pci/devices/"$dev"/vendor)
+            device=$(cat /sys/bus/pci/devices/"$dev"/device)
+
+            # this is safe to run on a pci id as long as members of that id that you do not want to bind are already bound to something else
+            echo "vfio-pci hook - binding vfio for device $vendor $device"
+            echo "$vendor" "$device" > /sys/bus/pci/drivers/vfio-pci/new_id
+
+            # doesn't work... says "write error: no such device"
+            #echo "$dev" > /sys/bus/pci/drivers/vfio-pci/bind
+        done
+    done
+    
+    # then we assume that anything bound by vfio-pci that is not in our list is bound by accident, and unbind them again
+    for dev in /sys/bus/pci/drivers/vfio-pci/[0-9][0-9][0-9][0-9]:*; do
+        dev=$(basename "$dev")
+        found=0
+        for pci_id in $(echo "$pci_ids" | sed -r "s|,|\n|g"); do
+            if [ "${pci_id:0:5}" != "0000:" ]; then
+                pci_id="0000:$pci_id"
+            fi
+            if [ "$pci_id" = "$dev" ]; then
+                found=1
+                break
+            fi
+        done
+        if [ "$found" != 1 ]; then
+            echo "vfio-pci hook - unlisted $dev was vfio-pci; unbinding"
+            echo "$dev" > /sys/bus/pci/devices/"$dev"/driver/unbind
+        fi
+    done
+}
+
+

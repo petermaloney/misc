@@ -1,0 +1,12 @@
+#!/bin/bash
+
+build() {
+    add_module vfio-pci
+    add_module vfio_iommu_type1
+    add_runscript
+}
+
+help() {
+    echo "This hook binds the vfio-pci driver to specific devices by pci address (not vendor:device like pci-stub.ids= does)."
+}
+
