@@ -2,12 +2,6 @@
 #
 # usr/bin/ash -> busybox
 #
-# test with:
-#     mkdir /tmp/cpio; cd /tmp/cpio
-#     gunzip -c /boot/initramfs-4.1.6-1-grsec-kvm-host-x86_64.img | cpio -iv
-#     for d in dev proc sys; do mount -o bind /$d /tmp/cpio/$d; done
-#     chroot /tmp/cpio/ ash
-#
 # Licensed GNU GPLv2; if you did not recieve a copy of the license, get one at http://www.gnu.org/licenses/gpl-2.0.html
 
 # vfio-pci doesn't bind if it isn't unbound, so it is slightly better than pci-stub
