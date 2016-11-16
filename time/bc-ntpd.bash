@@ -11,6 +11,7 @@ ntp_server="$1"
 
 if [ -z "$ntp_server" ]; then
     echo "USAGE: $0 <ntp server>"
+    exit 1
 fi
 
 get_offset() {
