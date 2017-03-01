@@ -1,0 +1,59 @@
+#!/bin/bash
+#
+# for notes, see bc-it-admin/documents/notes/bcache.txt
+#
+# License: GPLv2
+
+shopt -s nullglob
+
+get_d2() {
+    local d="$1"
+    if grep -Eq "^dm-[0-9]+$" <<< "$d"; then
+        local minor=$(grep -Eo "[0-9]+$" <<< "$d")
+        local d2=$(dmsetup ls | grep "(254:$minor)" | awk '{print $1}')
+    else
+        local d2=""
+    fi
+    echo "$d2"
+}
+lsbcache_m() {
+    printf "%s %s %s %s %s %s\n" "type" "uuid" "name" "device" "label" "cache"
+    
+    declare -A cache_devices
+    for p in /sys/fs/bcache/*-*-*-*-*; do
+        uuid=$(basename "$p")
+        for x in "$p"/cache[0-9]*; do
+            d=$(readlink "$x" | grep -Eo "block/.*" | awk -F/ '{print $(NF-1)}')
+            d2=$(get_d2 "$d")
+            if [ -z "$d2" ]; then
+                d2="-"
+            fi
+            cache_devices["$d"]=1
+            printf "%s %s %s %s %s\n" "cache" "$uuid" "-" "$d" "$d2"
+        done
+    done
+    
+    for p in /sys/block/bcache[0-9]*; do
+        for s in "$p"/slaves/*; do
+            d=$(readlink "$s" | awk -F/ '{print $NF}')
+            if [ "${cache_devices["$d"]}" = 1 ]; then
+                # skip slaves that are also printed above as type cache
+                continue
+            fi
+            d2=$(get_d2 "$d")
+            if [ -z "$d2" ]; then
+                d2="-"
+            fi
+            n=$(basename "$p")
+            c=$(bcache-super-show /dev/"$d" | awk '$1 == "cset.uuid" {print $2}')
+            uuid=$(bcache-super-show /dev/"$d" | awk '$1 == "dev.uuid" {print $2}')
+            
+            printf "%s %s %s %s %s %s %s\n" "backing" "$uuid" "$n" "$d" "$d2" "$c"
+        done
+    done
+}
+lsbcache() {
+    lsbcache_m | column -t
+}
+
+lsbcache
