@@ -1,7 +1,5 @@
 #!/bin/bash
 #
-# for notes, see bc-it-admin/documents/notes/bcache.txt
-#
 # License: GPLv2
 
 shopt -s nullglob
