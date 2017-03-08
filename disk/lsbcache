@@ -1,8 +1,17 @@
 #!/bin/bash
-#
-# License: GPLv2
 
 shopt -s nullglob
+
+table_format() {
+    if which column >/dev/null 2>&1; then
+        # column is optional
+        # column does a better job with less extra whitespace, and long fields not messing up the rest of the line
+        column -t
+    else
+        # otherwise rely on printf
+        cat
+    fi
+}
 
 get_d2() {
     local d="$1"
@@ -15,7 +24,7 @@ get_d2() {
     echo "$d2"
 }
 lsbcache_m() {
-    printf "%s %s %s %s %s %s\n" "type" "uuid" "name" "device" "label" "cache"
+    printf "%-7s  %-36s  %-10s  %-10s  %-10s  %-30s\n" "type" "uuid" "name" "device" "label" "cache"
     
     declare -A cache_devices
     for p in /sys/fs/bcache/*-*-*-*-*; do
@@ -27,7 +36,7 @@ lsbcache_m() {
                 d2="-"
             fi
             cache_devices["$d"]=1
-            printf "%s %s %s %s %s\n" "cache" "$uuid" "-" "$d" "$d2"
+            printf "%-7s  %-36s  %-10s  %-10s  %-10s\n" "cache" "$uuid" "-" "$d" "$d2"
         done
     done
     
@@ -46,12 +55,12 @@ lsbcache_m() {
             c=$(bcache-super-show /dev/"$d" | awk '$1 == "cset.uuid" {print $2}')
             uuid=$(bcache-super-show /dev/"$d" | awk '$1 == "dev.uuid" {print $2}')
             
-            printf "%s %s %s %s %s %s %s\n" "backing" "$uuid" "$n" "$d" "$d2" "$c"
+            printf "%-7s  %-36s  %-10s  %-10s  %-10s  %-30s\n" "backing" "$uuid" "$n" "$d" "$d2" "$c"
         done
     done
 }
 lsbcache() {
-    lsbcache_m | column -t
+    lsbcache_m | table_format
 }
 
 lsbcache
