@@ -1,4 +1,6 @@
 #!/bin/bash
+#
+# License: GPLv2
 
 shopt -s nullglob
 
