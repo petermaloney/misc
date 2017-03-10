@@ -15,6 +15,8 @@ table_format() {
     fi
 }
 
+# gets label... another name for the device
+# for lvm, we take the dm-x device and get the name like vgname--lvname
 get_d2() {
     local d="$1"
     if grep -Eq "^dm-[0-9]+$" <<< "$d"; then
@@ -25,9 +27,11 @@ get_d2() {
     fi
     echo "$d2"
 }
+
 lsbcache_m() {
     printf "%-7s  %-36s  %-10s  %-10s  %-10s  %-30s\n" "type" "uuid" "name" "device" "label" "cache"
     
+    # find cache devices, which are in /sys/fs/bcache/ instead of /sys/block/
     declare -A cache_devices
     for p in /sys/fs/bcache/*-*-*-*-*; do
         uuid=$(basename "$p")
@@ -42,6 +46,8 @@ lsbcache_m() {
         done
     done
     
+    # find bache devices that are running
+    declare -A backing_devices
     for p in /sys/block/bcache[0-9]*; do
         for s in "$p"/slaves/*; do
             d=$(readlink "$s" | awk -F/ '{print $NF}')
@@ -58,9 +64,36 @@ lsbcache_m() {
             uuid=$(bcache-super-show /dev/"$d" | awk '$1 == "dev.uuid" {print $2}')
             
             printf "%-7s  %-36s  %-10s  %-10s  %-10s  %-30s\n" "backing" "$uuid" "$n" "$d" "$d2" "$c"
+            backing_devices["$uuid"]=1
         done
     done
+    
+    # find bcache devices that are registered, but not running
+    for p in /sys/block/*/bcache; do
+        d=$(basename $(readlink -f "$p"/..))
+        
+        if [ "${cache_devices["$d"]}" = 1 ]; then
+            # skip slaves that are also printed above as type cache
+            continue
+        fi
+        
+        d2=$(get_d2 "$d")
+        if [ -z "$d2" ]; then
+            d2="-"
+        fi
+        n="-"
+        c=$(bcache-super-show /dev/"$d" | awk '$1 == "cset.uuid" {print $2}')
+        uuid=$(bcache-super-show /dev/"$d" | awk '$1 == "dev.uuid" {print $2}')
+        
+        if [ "${backing_devices["$uuid"]}" = 1 ]; then
+            # skip slaves that are also printed above as type backing
+            continue
+        fi
+        
+        printf "%-7s  %-36s  %-10s  %-10s  %-10s  %-30s\n" "backing" "$uuid" "$n" "$d" "$d2" "$c"
+    done
 }
+
 lsbcache() {
     lsbcache_m | table_format
 }
