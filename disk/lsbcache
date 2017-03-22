@@ -36,13 +36,17 @@ lsbcache_m() {
     for p in /sys/fs/bcache/*-*-*-*-*; do
         uuid=$(basename "$p")
         for x in "$p"/cache[0-9]*; do
-            d=$(readlink "$x" | grep -Eo "block/.*" | awk -F/ '{print $(NF-1)}')
+            # link might look like:
+            #     ../../../devices/virtual/block/dm-8/bcache
+            #     ../../../devices/pci0000:00/0000:00:03.0/0000:05:00.0/nvme/nvme0/nvme0n1/nvme0n1p10/bcache
+            d=$(readlink "$x" | awk -F/ '{print $(NF-1)}')
+            
             d2=$(get_d2 "$d")
             if [ -z "$d2" ]; then
                 d2="-"
             fi
             cache_devices["$d"]=1
-            printf "%-7s  %-36s  %-10s  %-10s  %-10s\n" "cache" "$uuid" "-" "$d" "$d2"
+            printf "%-7s  %-36s  %-10s  %-10s  %-10s -\n" "cache" "$uuid" "-" "$d" "$d2"
         done
     done
     
@@ -60,7 +64,13 @@ lsbcache_m() {
                 d2="-"
             fi
             n=$(basename "$p")
-            c=$(bcache-super-show /dev/"$d" | awk '$1 == "cset.uuid" {print $2}')
+            cache_state=$(bcache-super-show /dev/"$d" | awk '$1 == "dev.data.cache_state" {print $2}')
+            if [ "$cache_state" = 0 ]; then
+                # if cache is detached, don't print the bogus uuid
+                c="-"
+            else
+                c=$(bcache-super-show /dev/"$d" | awk '$1 == "cset.uuid" {print $2}')
+            fi
             uuid=$(bcache-super-show /dev/"$d" | awk '$1 == "dev.uuid" {print $2}')
             
             printf "%-7s  %-36s  %-10s  %-10s  %-10s  %-30s\n" "backing" "$uuid" "$n" "$d" "$d2" "$c"
@@ -82,7 +92,13 @@ lsbcache_m() {
             d2="-"
         fi
         n="-"
-        c=$(bcache-super-show /dev/"$d" | awk '$1 == "cset.uuid" {print $2}')
+        cache_state=$(bcache-super-show /dev/"$d" | awk '$1 == "dev.data.cache_state" {print $2}')
+        if [ "$cache_state" = 0 ]; then
+            # if cache is detached, don't print the bogus uuid
+            c="-"
+        else
+            c=$(bcache-super-show /dev/"$d" | awk '$1 == "cset.uuid" {print $2}')
+        fi
         uuid=$(bcache-super-show /dev/"$d" | awk '$1 == "dev.uuid" {print $2}')
         
         if [ "${backing_devices["$uuid"]}" = 1 ]; then
