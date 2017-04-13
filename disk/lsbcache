@@ -50,6 +50,7 @@ print_device() {
         cache_state=-
         c=-
         uuid=-
+        mountpoint=-
     else
         device_label=$(get_device_label "$d")
         if [ -z "$device_label" ]; then
@@ -63,6 +64,7 @@ print_device() {
             c=$(bcache-super-show /dev/"$d" | awk '$1 == "cset.uuid" {print $2}')
         fi
         uuid=$(bcache-super-show /dev/"$d" | awk '$1 == "dev.uuid" {print $2}')
+        mountpoint=$(df "/dev/$n" | awk 'NR==2{print $NF}')
     fi
     
     if [ -n "$uuid" -a "$uuid" != "-" -a "${backing_devices["$uuid"]}" = 1 ]; then
@@ -75,14 +77,14 @@ print_device() {
         uuid="-"
     fi
     
-    printf "%-7s  %-36s  %-10s  %-10s  %-10s  %-30s\n" "backing" "$uuid" "$n" "$d" "$device_label" "$c"
+    printf "%-7s  %-36s  %-10s  %-10s  %-10s  %-36s %-30s\n" "backing" "$uuid" "$n" "$d" "$device_label" "$c" "$mountpoint"
     if [ "$uuid" != "-" ]; then
         backing_devices["$uuid"]=1
     fi
 }
 
 lsbcache_m() {
-    printf "%-7s  %-36s  %-10s  %-10s  %-10s  %-30s\n" "type" "uuid" "name" "device" "label" "cache"
+    printf "%-7s  %-36s  %-10s  %-10s  %-10s  %-36s %-30s\n" "type" "uuid" "name" "device" "label" "cache" "mountpoint"
     
     # find cache devices, which are in /sys/fs/bcache/ instead of /sys/block/
     declare -A cache_devices
@@ -99,7 +101,7 @@ lsbcache_m() {
                 device_label="-"
             fi
             cache_devices["$d"]=1
-            printf "%-7s  %-36s  %-10s  %-10s  %-10s -\n" "cache" "$uuid" "-" "$d" "$device_label"
+            printf "%-7s  %-36s  %-10s  %-10s  %-10s %-36s %-30s\n" "cache" "$uuid" "-" "$d" "$device_label" "-" "-"
         done
     done
     
