@@ -44,13 +44,17 @@ print_device() {
     if [ "$n" = "bcache" ]; then
         n=-
     fi
+    if [ "$n" = "-" ]; then
+        mountpoint=-
+    else
+        mountpoint=$(df "/dev/$n" | awk 'NR==2{print $NF}')
+    fi
     if [ ! -e /dev/"$d" ]; then
         echo "ERROR: /dev/$d does not exist" >&2
         device_label=-
         cache_state=-
         c=-
         uuid=-
-        mountpoint=-
     else
         device_label=$(get_device_label "$d")
         if [ -z "$device_label" ]; then
@@ -64,7 +68,6 @@ print_device() {
             c=$(bcache-super-show /dev/"$d" | awk '$1 == "cset.uuid" {print $2}')
         fi
         uuid=$(bcache-super-show /dev/"$d" | awk '$1 == "dev.uuid" {print $2}')
-        mountpoint=$(df "/dev/$n" | awk 'NR==2{print $NF}')
     fi
     
     if [ -n "$uuid" -a "$uuid" != "-" -a "${backing_devices["$uuid"]}" = 1 ]; then
