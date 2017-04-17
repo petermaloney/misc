@@ -17,19 +17,77 @@ table_format() {
 
 # gets label... another name for the device
 # for lvm, we take the dm-x device and get the name like vgname--lvname
-get_d2() {
+get_device_label() {
     local d="$1"
     if grep -Eq "^dm-[0-9]+$" <<< "$d"; then
         local minor=$(grep -Eo "[0-9]+$" <<< "$d")
-        local d2=$(dmsetup ls | grep "(254:$minor)" | awk '{print $1}')
+        local device_label=$(dmsetup ls | grep "(254:$minor)" | awk '{print $1}')
     else
-        local d2=""
+        local device_label=""
     fi
-    echo "$d2"
+    echo "$device_label"
+}
+
+declare -A backing_devices
+print_device() {
+    local d="$1"
+    local n="$2"
+    
+    if [ -z "$d" ]; then
+        echo "ERROR: bcache link for $p is broken" >&2
+        return
+    fi
+    if [ "${cache_devices["$d"]}" = 1 ]; then
+        # skip slaves that are also printed above as type cache
+        return
+    fi
+    if [ "$n" = "bcache" ]; then
+        n=-
+    fi
+    if [ "$n" = "-" ]; then
+        mountpoint=-
+    else
+        mountpoint=$(df "/dev/$n" | awk 'NR==2{print $NF}')
+    fi
+    if [ ! -e /dev/"$d" ]; then
+        echo "ERROR: /dev/$d does not exist" >&2
+        device_label=-
+        cache_state=-
+        c=-
+        uuid=-
+    else
+        device_label=$(get_device_label "$d")
+        if [ -z "$device_label" ]; then
+            device_label="-"
+        fi
+        cache_state=$(bcache-super-show /dev/"$d" | awk '$1 == "dev.data.cache_state" {print $2}')
+        if [ "$cache_state" = 0 ]; then
+            # if cache is detached, don't print the bogus uuid
+            c="-"
+        else
+            c=$(bcache-super-show /dev/"$d" | awk '$1 == "cset.uuid" {print $2}')
+        fi
+        uuid=$(bcache-super-show /dev/"$d" | awk '$1 == "dev.uuid" {print $2}')
+    fi
+    
+    if [ -n "$uuid" -a "$uuid" != "-" -a "${backing_devices["$uuid"]}" = 1 ]; then
+        # skip slaves that are also printed above as type backing
+        return
+    fi
+    
+    if [ -z "$uuid" ]; then
+        # this happens when /dev/"$d" doesn't exist, like if the disk died
+        uuid="-"
+    fi
+    
+    printf "%-7s  %-36s  %-10s  %-10s  %-10s  %-36s %-30s\n" "backing" "$uuid" "$n" "$d" "$device_label" "$c" "$mountpoint"
+    if [ "$uuid" != "-" ]; then
+        backing_devices["$uuid"]=1
+    fi
 }
 
 lsbcache_m() {
-    printf "%-7s  %-36s  %-10s  %-10s  %-10s  %-30s\n" "type" "uuid" "name" "device" "label" "cache"
+    printf "%-7s  %-36s  %-10s  %-10s  %-10s  %-36s %-30s\n" "type" "uuid" "name" "device" "label" "cache" "mountpoint"
     
     # find cache devices, which are in /sys/fs/bcache/ instead of /sys/block/
     declare -A cache_devices
@@ -41,60 +99,27 @@ lsbcache_m() {
             #     ../../../devices/pci0000:00/0000:00:03.0/0000:05:00.0/nvme/nvme0/nvme0n1/nvme0n1p10/bcache
             d=$(readlink "$x" | awk -F/ '{print $(NF-1)}')
             
-            d2=$(get_d2 "$d")
-            if [ -z "$d2" ]; then
-                d2="-"
+            device_label=$(get_device_label "$d")
+            if [ -z "$device_label" ]; then
+                device_label="-"
             fi
             cache_devices["$d"]=1
-            printf "%-7s  %-36s  %-10s  %-10s  %-10s\n" "cache" "$uuid" "-" "$d" "$d2"
+            printf "%-7s  %-36s  %-10s  %-10s  %-10s %-36s %-30s\n" "cache" "$uuid" "-" "$d" "$device_label" "-" "-"
         done
     done
     
     # find bache devices that are running
-    declare -A backing_devices
     for p in /sys/block/bcache[0-9]*; do
         for s in "$p"/slaves/*; do
             d=$(readlink "$s" | awk -F/ '{print $NF}')
-            if [ "${cache_devices["$d"]}" = 1 ]; then
-                # skip slaves that are also printed above as type cache
-                continue
-            fi
-            d2=$(get_d2 "$d")
-            if [ -z "$d2" ]; then
-                d2="-"
-            fi
-            n=$(basename "$p")
-            c=$(bcache-super-show /dev/"$d" | awk '$1 == "cset.uuid" {print $2}')
-            uuid=$(bcache-super-show /dev/"$d" | awk '$1 == "dev.uuid" {print $2}')
-            
-            printf "%-7s  %-36s  %-10s  %-10s  %-10s  %-30s\n" "backing" "$uuid" "$n" "$d" "$d2" "$c"
-            backing_devices["$uuid"]=1
+            print_device "$d" "$(basename "$p")"
         done
     done
     
     # find bcache devices that are registered, but not running
     for p in /sys/block/*/bcache; do
-        d=$(basename $(readlink -f "$p"/..))
-        
-        if [ "${cache_devices["$d"]}" = 1 ]; then
-            # skip slaves that are also printed above as type cache
-            continue
-        fi
-        
-        d2=$(get_d2 "$d")
-        if [ -z "$d2" ]; then
-            d2="-"
-        fi
-        n="-"
-        c=$(bcache-super-show /dev/"$d" | awk '$1 == "cset.uuid" {print $2}')
-        uuid=$(bcache-super-show /dev/"$d" | awk '$1 == "dev.uuid" {print $2}')
-        
-        if [ "${backing_devices["$uuid"]}" = 1 ]; then
-            # skip slaves that are also printed above as type backing
-            continue
-        fi
-        
-        printf "%-7s  %-36s  %-10s  %-10s  %-10s  %-30s\n" "backing" "$uuid" "$n" "$d" "$d2" "$c"
+        d=$(readlink -f "$p"/.. | awk -F/ '{print $NF}')
+        print_device "$d" "-"
     done
 }
 
