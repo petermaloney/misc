@@ -356,19 +356,20 @@ if __name__ == "__main__":
         if args.report:
             print_report()
 
-        adjustment_made = False
+        do_short_sleep = False
         if args.adjust:
             # our "new" bytes and variance numbers will only be right after peering is done, so don't run until then
             b, h = is_peering()
             if b:
                 logger.info("refusing to reweight during peering. Try again later.\n%s" % h)
+                do_short_sleep = True
             else:
-                adjustment_made = adjust()
+                do_short_sleep = adjust()
 
         if not args.loop:
             break
         
-        if adjustment_made:
+        if do_short_sleep:
             time.sleep(args.sleep_short)
         else:
             time.sleep(args.sleep)
