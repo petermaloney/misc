@@ -22,7 +22,7 @@ re_pg_stat = re.compile("^[0-9]+\.[0-9a-z]+")
 osds = {}
 avg_old = 0
 avg_new = 0
-
+health = ""
 
 #====================
 # logging
@@ -225,6 +225,8 @@ def refresh_bytes():
                 osd.bytes_new = 0
             osd.bytes_new += size
 
+class WaitForHealthException(Exception):
+    pass
 
 def refresh_var():
     global osds
@@ -235,7 +237,10 @@ def refresh_var():
         osd.var_old = osd.bytes_old / osd.weight / avg_old
         osd.var_new = osd.bytes_new / osd.weight / avg_new
         
-        if args.fudge:
+        if args.fudge and osd.df_fudge is None:
+            if "remapped" in health or "misplaced" in health or "degraded" in health or "peering" in health:
+                raise WaitForHealthException()
+            
             # adding the fudge factor to try to match `ceph osd df` but also allow predicting post recovery size
             myuse = osd.bytes_old/osd.size*100
             osd.df_fudge = osd.use_percent / myuse
@@ -245,6 +250,7 @@ def refresh_var():
 
 
 def refresh_all():
+    health = ceph_health()
     refresh_weight()
     refresh_bytes()
     refresh_average()
@@ -259,13 +265,6 @@ def print_report():
     for osd in osds.values():
         print("%3d %7.5f %8.5f %14d %7.5f %14d %7.5f" % 
             (osd.osd_id, osd.weight, osd.reweight, osd.bytes_old, osd.var_old, osd.bytes_new, osd.var_new))
-
-
-def is_peering():
-    h = ceph_health()
-    if "peering" in h:
-        return True, h
-    return False, h
 
 
 def get_increment(var):
@@ -376,7 +375,12 @@ if __name__ == "__main__":
         logger.setLevel(logging.INFO)
 
     while True:
-        refresh_all()
+        try:
+            refresh_all()
+        except WaitForHealthException:
+            logger.info("fudge is enabled; need to wait for no pgs/objects are remapped, misplaced or degraded")
+            time.sleep(args.sleep)
+            continue
         
         if args.report:
             print_report()
@@ -384,10 +388,11 @@ if __name__ == "__main__":
         do_short_sleep = False
         if args.adjust:
             # our "new" bytes and variance numbers will only be right after peering is done, so don't run until then
-            b, h = is_peering()
-            if b:
-                logger.info("refusing to reweight during peering. Try again later.\n%s" % h)
-                do_short_sleep = True
+            if "peering" in health:
+                logger.info("refusing to reweight during peering. Try again later.")
+                while "peering" in ceph_health():
+                    time.sleep(1)
+                continue
             else:
                 do_short_sleep = adjust()
 
