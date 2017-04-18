@@ -10,6 +10,7 @@ import re
 import argparse
 import time
 import logging
+import json
 
 #====================
 # global variables
@@ -61,13 +62,12 @@ def ceph_health():
         raise Exception("ceph osd df command failed; err = %s" % str(err))
 
 def ceph_osd_df():
-    p = subprocess.Popen(["ceph", "osd", "df"],
+    p = subprocess.Popen(["ceph", "osd", "df", "--format=json"],
         stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
     out, err = p.communicate()
     if( p.returncode == 0 ):
-        lines = out.decode("UTF-8").splitlines()
-        return lines
+        return json.loads(out.decode("UTF-8"))
     else:
         raise Exception("ceph osd df command failed; err = %s" % str(err))
 
@@ -139,23 +139,28 @@ def refresh_average():
 class Osd:
     def __init__(self, osd_id):
         self.osd_id = osd_id
+        
+        # from ceph osd df
         self.weight = None
         self.reweight = None
+        self.use_percent = None
+        self.size = None
+        self.df_var = None
+
+        # from ceph pg dump
         self.bytes_old = None
         self.bytes_new = None
+
         self.var_old = None
         self.var_new = None
-
+        # fudge factor to take the "new" numbers and adjust them to be closer to what ceph osd df gives you
+        self.df_fudge = None
 
 def refresh_weight():
     global osds
     
-    for line in ceph_osd_df():
-        line = line.split()
-        if line[0] == "ID" or line[0] == "TOTAL" or line[0] == "MIN/MAX":
-            # ignore header and other things
-            continue
-        osd_id = int(line[0])
+    for row in ceph_osd_df()["nodes"]:
+        osd_id = row["id"]
         
         if osd_id in osds:
             osd = osds[osd_id]
@@ -163,9 +168,13 @@ def refresh_weight():
             osd = Osd(osd_id)
             osds[osd_id] = osd
         
-        osd.weight = float(line[1])
-        osd.reweight = float(line[2])
-
+        osd.weight = row["crush_weight"]
+        osd.reweight = row["reweight"]
+        
+        osd.use_percent = row["utilization"]
+        
+        osd.size = row["kb"]*1024
+        osd.df_var = row["var"]
 
 def refresh_bytes():
     global osds
@@ -188,6 +197,7 @@ def refresh_bytes():
         size = int(line[6])
         up = line[14]
         acting = line[16]
+        objects = int(line[1])
         
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug("DEBUG: size = %s, up = %s, acting = %s" % (size,up,acting))
@@ -224,6 +234,14 @@ def refresh_var():
     for osd in osds.values():
         osd.var_old = osd.bytes_old / osd.weight / avg_old
         osd.var_new = osd.bytes_new / osd.weight / avg_new
+        
+        if args.fudge:
+            # adding the fudge factor to try to match `ceph osd df` but also allow predicting post recovery size
+            myuse = osd.bytes_old/osd.size*100
+            osd.df_fudge = osd.use_percent / myuse
+            
+            osd.var_old *= osd.df_fudge
+            osd.var_new *= osd.df_fudge
 
 
 def refresh_all():
@@ -236,17 +254,20 @@ def refresh_all():
 def print_report():
     global osds
     
-    print("%-3s %-7s %-8s %-14s %-7s %-14s %-7s" % ("osd", "weight", "reweight", "old size", "var", "new size", "var"))
+    print("%-3s %-7s %-8s %-14s %-7s %-14s %-7s" % (
+        "osd", "weight", "reweight", "old_size", "var", "new_size", "var"))
     for osd in osds.values():
         print("%3d %7.5f %8.5f %14d %7.5f %14d %7.5f" % 
-              (osd.osd_id, osd.weight, osd.reweight, osd.bytes_old, osd.var_old, osd.bytes_new, osd.var_new))
+            (osd.osd_id, osd.weight, osd.reweight, osd.bytes_old, osd.var_old, osd.bytes_new, osd.var_new))
+
 
 def is_peering():
     h = ceph_health()
     if "peering" in h:
         return True, h
     return False, h
-    
+
+
 def get_increment(var):
     if var < 0.85 or var > 1.15:
         return args.step
@@ -256,6 +277,7 @@ def get_increment(var):
     
     # sharply lower step relative to p
     return p**2 * args.step
+
 
 def adjust():
     lowest = osds[0]
@@ -303,6 +325,7 @@ def adjust():
     
     return adjustment_made
 
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Reweight OSDs so they have closer to equal space used.')
     parser.add_argument('-d', '--debug', action='store_const', const=True,
@@ -311,6 +334,8 @@ if __name__ == "__main__":
                     help='verbose mode')
     parser.add_argument('-q', '--quiet', action='store_const', const=True, default=False,
                     help='quiet mode')
+    parser.add_argument('-F', '--fudge', action='store_const', const=True, default=False,
+                    help='compare to ceph osd df to calculate a fudge factor to use when calculating var')
 
     parser.add_argument('-r', '--report', action='store_const', const=True, default=False,
                     help='print report table')
