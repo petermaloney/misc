@@ -16,9 +16,6 @@ import json
 # global variables
 #====================
 
-# pg_stat column in `ceph pg dump`, for finding the end of the pg list to ignore whatever is after it
-re_pg_stat = re.compile("^[0-9]+\.[0-9a-z]+")
-
 osds = {}
 avg_old = 0
 avg_new = 0
@@ -75,29 +72,12 @@ def ceph_osd_df():
 def ceph_pg_dump():
     #bc-ceph-pg-dump -a -s
 
-    p = subprocess.Popen(["ceph", "pg", "dump"],
+    p = subprocess.Popen(["ceph", "pg", "dump", "--format=json"],
         stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
     out, err = p.communicate()
     if( p.returncode == 0 ):
-        lines = out.decode("UTF-8").splitlines()
-        
-        # find the header row
-        header = 0
-        for line in lines:
-            if line[0:8] == "pg_stat\t":
-                break
-            header+=1
-            
-        # find the last pg
-        last_pg = header
-        for line in lines[header+1:]:
-            if not re_pg_stat.match(line[0:8]):
-                break
-            last_pg+=1
-    
-        # return just the pg lines, not the other stats
-        return lines[header:last_pg]
+        return json.loads(out.decode("UTF-8"))["pg_stats"]
     else:
         raise Exception("pg dump command failed; err = %s" % str(err))
 
@@ -183,30 +163,16 @@ def refresh_bytes():
         osd.bytes_old = 0
         osd.bytes_new = 0
         
-    for line in ceph_pg_dump():
-        line = line.split()
-        
-        if line[0] == "pg_stat":
-            # ignore header
-            continue
-        
-        #   0          1          2      3       4       5      6        7      8          9        10 11         12    13          14    15            16                
-        # ['pg_stat', 'objects', 'mip', 'degr', 'misp', 'unf', 'bytes', 'log', 'disklog', 'state', 'state_stamp', 'v', 'reported', 'up', 'up_primary', 'acting', 'acting_primary', 'last_scrub', 'scrub_stamp', 'last_deep_scrub', 'deep_scrub_stamp']
-
-
-        size = int(line[6])
-        up = line[14]
-        acting = line[16]
-        objects = int(line[1])
+    for row in ceph_pg_dump():
+        size = row["stat_sum"]["num_bytes"]
+        up = row["up"]
+        acting = row["acting"]
         
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug("DEBUG: size = %s, up = %s, acting = %s" % (size,up,acting))
         
-        osds_old = acting.replace("[", "").replace("]", "").split(",")
-        osds_new = up.replace("[", "").replace("]", "").split(",")
-        
-        osds_old = list(map(int, osds_old))
-        osds_new = list(map(int, osds_new))
+        osds_old = acting
+        osds_new = up
 
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug("DEBUG: osds_old = %s, osds_new = %s" % (osds_old, osds_new))
