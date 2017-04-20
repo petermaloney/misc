@@ -70,7 +70,7 @@ def ceph_osd_df():
     if( p.returncode == 0 ):
         try:
             return json.loads(out.decode("UTF-8"))
-        except ValueError e:
+        except ValueError as e:
             raise JsonValueError(e)
     else:
         raise Exception("ceph osd df command failed; err = %s" % str(err))
@@ -86,7 +86,7 @@ def ceph_pg_dump():
     if( p.returncode == 0 ):
         try:
             return json.loads(out.decode("UTF-8"))["pg_stats"]
-        except ValueError e:
+        except ValueError as e:
             raise JsonValueError(e)
     else:
         raise Exception("pg dump command failed; err = %s" % str(err))
