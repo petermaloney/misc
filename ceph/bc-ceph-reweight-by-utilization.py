@@ -281,7 +281,7 @@ def adjust():
     # We don't reweight the lowest if it's 1, so that way one osd will always have reweight 1, so the other numbers always end up in a range 0-1. And also we don't raise numbers greater than 1.
     if lowest.reweight < 1 and spread > max_spread:
         increment = get_increment(lowest.var_new)
-        new = round(round(lowest.reweight,3) + increment, 4)
+        new = round(round(lowest.reweight,4) + increment, 5)
         if new > 1:
             new = 1
         logger.info("Doing reweight: osd_id = %s, reweight = %s -> %s" % (lowest.osd_id, lowest.reweight, new))
@@ -293,7 +293,7 @@ def adjust():
         
     if spread > max_spread:
         increment = get_increment(highest.var_new)
-        new = round(round(highest.reweight,3) - increment, 4)
+        new = round(round(highest.reweight,4) - increment, 5)
         logger.info("Doing reweight: osd_id = %s, reweight = %s -> %s" % (highest.osd_id, highest.reweight, new))
         if not args.dry_run:
             ceph_osd_reweight(highest.osd_id, new)
