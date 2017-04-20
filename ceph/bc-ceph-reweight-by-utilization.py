@@ -219,7 +219,10 @@ def refresh_var():
             
             # adding the fudge factor to try to match `ceph osd df` but also allow predicting post recovery size
             myuse = osd.bytes_old/osd.size*100
-            osd.df_fudge = osd.use_percent / myuse
+            if myuse != 0:
+                osd.df_fudge = osd.use_percent / myuse
+            else:
+                osd.df_fudge = 1
             
             osd.var_old *= osd.df_fudge
             osd.var_new *= osd.df_fudge
