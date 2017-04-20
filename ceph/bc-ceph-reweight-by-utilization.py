@@ -47,6 +47,10 @@ logger.addHandler(handler)
 
 #====================
 
+class JsonValueError(Exception):
+    def __init__(self, cause):
+        self.cause = cause
+    
 def ceph_health():
     p = subprocess.Popen(["ceph", "health"],
         stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -64,7 +68,10 @@ def ceph_osd_df():
 
     out, err = p.communicate()
     if( p.returncode == 0 ):
-        return json.loads(out.decode("UTF-8"))
+        try:
+            return json.loads(out.decode("UTF-8"))
+        except ValueError e:
+            raise JsonValueError(e)
     else:
         raise Exception("ceph osd df command failed; err = %s" % str(err))
 
@@ -77,7 +84,10 @@ def ceph_pg_dump():
 
     out, err = p.communicate()
     if( p.returncode == 0 ):
-        return json.loads(out.decode("UTF-8"))["pg_stats"]
+        try:
+            return json.loads(out.decode("UTF-8"))["pg_stats"]
+        except ValueError e:
+            raise JsonValueError(e)
     else:
         raise Exception("pg dump command failed; err = %s" % str(err))
 
@@ -346,6 +356,11 @@ if __name__ == "__main__":
         except WaitForHealthException:
             logger.info("fudge is enabled; need to wait for no pgs/objects are remapped, misplaced or degraded")
             time.sleep(args.sleep)
+            continue
+        except JsonValueError:
+            # I'll just assume this is the ceph command's fault, and ignore it. It seems to happen when osds are going out or in.
+            logger.warning("got ValueError from ceph... sleeping 5s and will retry")
+            time.sleep(5)
             continue
         
         if args.report:
