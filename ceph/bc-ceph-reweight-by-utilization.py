@@ -292,8 +292,12 @@ def adjust():
 
     adjustment_made = False
     
+    # difference from 1 so we can choose only the worst of the 2, which possibly prevents very low var osds from flapping to/from high to low because of another worse osd needing reweight
+    lowest_d = 1 - lowest.var_new
+    highest_d = highest.var_new - 1
+    
     # We don't reweight the lowest if it's 1, so that way one osd will always have reweight 1, so the other numbers always end up in a range 0-1. And also we don't raise numbers greater than 1.
-    if lowest.reweight < 1 and spread > max_spread:
+    if lowest_d >= highest_d and lowest.reweight < 1 and spread > max_spread:
         increment = get_increment(lowest.var_new)
         new = round(round(lowest.reweight,4) + increment, 5)
         if new > 1:
@@ -305,7 +309,7 @@ def adjust():
     else:
         logger.verbose("Skipping reweight: osd_id = %s, reweight = %s" % (lowest.osd_id, lowest.reweight))
         
-    if spread > max_spread:
+    if lowest_d < highest_d and spread > max_spread:
         increment = get_increment(highest.var_new)
         new = round(round(highest.reweight,4) - increment, 5)
         logger.info("Doing reweight: osd_id = %s, reweight = %s -> %s" % (highest.osd_id, highest.reweight, new))
