@@ -345,8 +345,8 @@ if __name__ == "__main__":
                     help='Repeat the reweight process forever.')
     parser.add_argument('--sleep', action='store', default=60, type=float,
                     help='Seconds to sleep between loops (default 60)')
-    parser.add_argument('--sleep-short', action='store', default=10, type=float,
-                    help='Seconds to sleep between loops that do adjustments (default 10)')
+    parser.add_argument('--sleep-short', action='store', default=1, type=float,
+                    help='Seconds to sleep between loops that do adjustments (default 1)')
     
     args = parser.parse_args()
 
