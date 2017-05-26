@@ -20,6 +20,7 @@ osds = {}
 avg_old = 0
 avg_new = 0
 health = ""
+json_nan_regex = None
 
 #====================
 # logging
@@ -68,10 +69,24 @@ def ceph_osd_df():
 
     out, err = p.communicate()
     if( p.returncode == 0 ):
+        jsontxt = out.decode("UTF-8")
         try:
-            return json.loads(out.decode("UTF-8"))
+            return json.loads(jsontxt)
         except ValueError as e:
-            raise JsonValueError(e)
+            # we expect this is because some osds are not fully added, so they have "-nan" in the output.
+            # that's not valid json, so here's a quick fix without parsing properly (which is the json lib's job)
+            try:
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug("DOING WORKAROUND. jsontxt = %s" % jsontxt)
+                global json_nan_regex
+                if not json_nan_regex:
+                    json_nan_regex = re.compile("([^a-zA-Z0-9]+)(-nan)")
+                jsontxt = json_nan_regex.sub("\\1\"-nan\"", jsontxt)
+                return json.loads(jsontxt)
+            except ValueError as e2:
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug("FAILED WORKAROUND. jsontxt = %s" % jsontxt)
+                raise JsonValueError(e)
     else:
         raise Exception("ceph osd df command failed; err = %s" % str(err))
 
@@ -163,6 +178,11 @@ def refresh_weight():
         osd.weight = row["crush_weight"]
         osd.reweight = row["reweight"]
         
+        utilization = row["utilization"]
+        if utilization == "-nan":
+            del osds[osd_id]
+            continue
+            
         osd.use_percent = row["utilization"]
         
         osd.size = row["kb"]*1024
