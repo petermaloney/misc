@@ -140,6 +140,8 @@ class Osd:
         # from ceph pg dump
         self.bytes_old = None
         self.bytes_new = None
+        self.pgs_old = None
+        self.pgs_new = None
 
         self.var_old = None
         self.var_new = None
@@ -172,6 +174,8 @@ def refresh_bytes():
     for osd in osds.values():
         osd.bytes_old = 0
         osd.bytes_new = 0
+        osd.pgs_old = 0
+        osd.pgs_new = 0
         
     for row in ceph_pg_dump():
         size = row["stat_sum"]["num_bytes"]
@@ -193,6 +197,7 @@ def refresh_bytes():
             if not osd.bytes_old:
                 osd.bytes_old = 0
             osd.bytes_old += size
+            osd.pgs_old += 1
 
         for osd_id in osds_new:
             osd_id = int(osd_id)
@@ -200,6 +205,7 @@ def refresh_bytes():
             if not osd.bytes_new:
                 osd.bytes_new = 0
             osd.bytes_new += size
+            osd.pgs_new += 1
 
 class WaitForHealthException(Exception):
     pass
@@ -237,13 +243,21 @@ def refresh_all():
 
 
 def print_report():
-    global osds
+    global osds, args
     
-    print("%-3s %-7s %-8s %-14s %-7s %-14s %-7s" % (
-        "osd", "weight", "reweight", "old_size", "var", "new_size", "var"))
-    for osd in osds.values():
-        print("%3d %7.5f %8.5f %14d %7.5f %14d %7.5f" % 
-            (osd.osd_id, osd.weight, osd.reweight, osd.bytes_old, osd.var_old, osd.bytes_new, osd.var_new))
+    if args.verbose:
+        print("%-3s %-7s %-8s %-7s %-14s %-7s %-7s %-14s %-7s" % (
+            "osd", "weight", "reweight", "old_pgs", "old_size", "var", "new_pgs", "new_size", "var"))
+        for osd in osds.values():
+            print("%3d %7.5f %8.5f %7d %14d %7.5f %7d %14d %7.5f" % 
+                (osd.osd_id, osd.weight, osd.reweight, osd.pgs_old, osd.bytes_old, osd.var_old, osd.pgs_new, osd.bytes_new, osd.var_new))
+    else:
+        print("%-3s %-7s %-8s %-14s %-7s %-14s %-7s" % (
+            "osd", "weight", "reweight", "old_size", "var", "new_size", "var"))
+        for osd in osds.values():
+            print("%3d %7.5f %8.5f %14d %7.5f %14d %7.5f" % 
+                (osd.osd_id, osd.weight, osd.reweight, osd.bytes_old, osd.var_old, osd.bytes_new, osd.var_new))
+        
 
 
 def get_increment(var):
