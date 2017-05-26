@@ -331,7 +331,7 @@ if __name__ == "__main__":
     parser.add_argument('-q', '--quiet', action='store_const', const=True, default=False,
                     help='quiet mode')
     parser.add_argument('-F', '--fudge', action='store_const', const=True, default=False,
-                    help='compare to ceph osd df to calculate a fudge factor to use when calculating var')
+                    help='Compare to ceph osd df to calculate a fudge factor to use when calculating var. This is useful for looking at the report and comparing to ceph osd df, but probably not a good idea to use along with -a.')
 
     parser.add_argument('-r', '--report', action='store_const', const=True, default=False,
                     help='print report table')
