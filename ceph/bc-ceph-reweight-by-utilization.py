@@ -176,16 +176,27 @@ def refresh_weight():
             osds[osd_id] = osd
         
         osd.weight = row["crush_weight"]
+        if osd.weight == 0:
+            # if weight is zero, it won't ever peer and get pgs, so we can ignore it
+            del osds[osd_id]
+            continue
+        
         osd.reweight = row["reweight"]
         
         utilization = row["utilization"]
         if utilization == "-nan":
+            # if utilization is -nan, it isn't really added to crush properly, so it can't reweight, so ignore it
             del osds[osd_id]
             continue
             
         osd.use_percent = row["utilization"]
         
         osd.size = row["kb"]*1024
+        if osd.size == 0:
+            # if size is zero, it won't ever get pgs, so we can ignore it
+            del osds[osd_id]
+            continue
+        
         osd.df_var = row["var"]
 
 def refresh_bytes():
@@ -213,6 +224,8 @@ def refresh_bytes():
         
         for osd_id in osds_old:
             osd_id = int(osd_id)
+            if osd_id not in osds:
+                continue
             osd = osds[osd_id]
             if not osd.bytes_old:
                 osd.bytes_old = 0
@@ -221,6 +234,8 @@ def refresh_bytes():
 
         for osd_id in osds_new:
             osd_id = int(osd_id)
+            if osd_id not in osds:
+                continue
             osd = osds[osd_id]
             if not osd.bytes_new:
                 osd.bytes_new = 0
@@ -292,13 +307,13 @@ def get_increment(var):
 
 
 def adjust():
-    lowest = osds[0]
-    highest = osds[0]
+    lowest = None
+    highest = None
     
     for osd in osds.values():
-        if osd.var_new < lowest.var_new:
+        if lowest is None or osd.var_new < lowest.var_new:
             lowest = osd
-        if osd.var_new > highest.var_new:
+        if highest is None or osd.var_new > highest.var_new:
             highest = osd
     
     # We look at the spread between lowest and highest instead of just comparing the lowest to the avg, and  highest to avg. That way a lowest with reweight = 1 and a highest that is close enough to avg doesn't stop the process.
@@ -317,7 +332,11 @@ def adjust():
     highest_d = highest.var_new - 1
     
     # We don't reweight the lowest if it's 1, so that way one osd will always have reweight 1, so the other numbers always end up in a range 0-1. And also we don't raise numbers greater than 1.
-    if lowest_d >= highest_d and lowest.reweight < 1 and spread > max_spread:
+    choose_lowest = lowest_d >= highest_d and lowest.reweight < 1
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug("choose_lowest = %s" % choose_lowest)
+    
+    if choose_lowest and spread > max_spread:
         increment = get_increment(lowest.var_new)
         new = round(round(lowest.reweight,4) + increment, 5)
         if new > 1:
@@ -329,7 +348,7 @@ def adjust():
     else:
         logger.verbose("Skipping reweight: osd_id = %s, reweight = %s" % (lowest.osd_id, lowest.reweight))
         
-    if lowest_d < highest_d and spread > max_spread:
+    if not choose_lowest and spread > max_spread:
         increment = get_increment(highest.var_new)
         new = round(round(highest.reweight,4) - increment, 5)
         logger.info("Doing reweight: osd_id = %s, reweight = %s -> %s" % (highest.osd_id, highest.reweight, new))
