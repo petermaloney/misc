@@ -281,15 +281,20 @@ def print_report():
     global osds, args
     
     if args.verbose:
+        # all osds and columns
         print("%-3s %-7s %-8s %-7s %-14s %-7s %-7s %-14s %-7s" % (
-            "osd", "weight", "reweight", "old_pgs", "old_size", "var", "new_pgs", "new_size", "var"))
+            "osd_id", "weight", "reweight", "pgs_old", "bytes_old", "var_old", "pgs_new", "bytes_new", "var_new"))
         for osd in osds.values():
             print("%3d %7.5f %8.5f %7d %14d %7.5f %7d %14d %7.5f" % 
                 (osd.osd_id, osd.weight, osd.reweight, osd.pgs_old, osd.bytes_old, osd.var_old, osd.pgs_new, osd.bytes_new, osd.var_new))
     else:
+        # top 10 and low 10 osds
         print("%-3s %-7s %-8s %-14s %-7s %-14s %-7s" % (
-            "osd", "weight", "reweight", "old_size", "var", "new_size", "var"))
-        for osd in osds.values():
+            "osd_id", "weight", "reweight", "bytes_old", "var_old", "bytes_new", "var_new"))
+
+        osds_sorted = sorted(osds.values(), key=lambda osd: getattr(osd, args.sort_by))
+        
+        for osd in osds_sorted:
             print("%3d %7.5f %8.5f %14d %7.5f %14d %7.5f" % 
                 (osd.osd_id, osd.weight, osd.reweight, osd.bytes_old, osd.var_old, osd.bytes_new, osd.var_new))
         
@@ -374,6 +379,9 @@ if __name__ == "__main__":
 
     parser.add_argument('-r', '--report', action='store_const', const=True, default=False,
                     help='print report table')
+    parser.add_argument('--sort-by', action='store', default="var_new",
+                    help='specify sort column for report table (default var_new)')
+    
     parser.add_argument('-a', '--adjust', action='store_const', const=True, default=False,
                     help='adjust the reweight (default is report only)')
     parser.add_argument('-n', '--dry-run', action='store_const', const=True, default=False,
