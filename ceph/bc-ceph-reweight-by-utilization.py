@@ -288,13 +288,20 @@ def print_report():
             print("%3d %7.5f %8.5f %7d %14d %7.5f %7d %14d %7.5f" % 
                 (osd.osd_id, osd.weight, osd.reweight, osd.pgs_old, osd.bytes_old, osd.var_old, osd.pgs_new, osd.bytes_new, osd.var_new))
     else:
-        # top 10 and low 10 osds
         print("%-3s %-7s %-8s %-14s %-7s %-14s %-7s" % (
             "osd_id", "weight", "reweight", "bytes_old", "var_old", "bytes_new", "var_new"))
 
         osds_sorted = sorted(osds.values(), key=lambda osd: getattr(osd, args.sort_by))
         
-        for osd in osds_sorted:
+        # top 10 and low 10 osds
+        osds_filtered = []
+        if args.report_short and len(osds_sorted) > 10:
+            osds_filtered += osds_sorted[0:10]
+            osds_filtered += osds_sorted[-10:]
+        else:
+            osds_filtered = osds_sorted
+        
+        for osd in osds_filtered:
             print("%3d %7.5f %8.5f %14d %7.5f %14d %7.5f" % 
                 (osd.osd_id, osd.weight, osd.reweight, osd.bytes_old, osd.var_old, osd.bytes_new, osd.var_new))
         
@@ -381,6 +388,8 @@ if __name__ == "__main__":
                     help='print report table')
     parser.add_argument('--sort-by', action='store', default="var_new",
                     help='specify sort column for report table (default var_new)')
+    parser.add_argument('--report-short', action='store_const', const=True, default=False,
+                    help='print short report table with max 10 low and high osds')
     
     parser.add_argument('-a', '--adjust', action='store_const', const=True, default=False,
                     help='adjust the reweight (default is report only)')
@@ -405,10 +414,13 @@ if __name__ == "__main__":
         logger.error("oload must be greater than 1")
         exit(1)
 
-    if not args.report and not args.adjust:
+    if not args.report and not args.report_short and not args.adjust:
         logger.error("Either report or adjust must be set")
         exit(1)
-
+    
+    if args.report_short:
+        args.report = True
+        
     if args.debug:
         logger.setLevel(logging.DEBUG)
     elif args.verbose:
