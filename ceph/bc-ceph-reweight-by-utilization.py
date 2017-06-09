@@ -328,13 +328,12 @@ def adjust():
         if highest is None or osd.var_new > highest.var_new:
             highest = osd
     
-    # We look at the spread between lowest and highest instead of just comparing the lowest to the avg, and  highest to avg. That way a lowest with reweight = 1 and a highest that is close enough to avg doesn't stop the process.
-    spread = highest.var_new - lowest.var_new
-    max_spread = (args.oload - 1)*2
+    spread = highest.var_new
+    max_spread = args.oload - 1
     
     txt = "lowest osd_id = %s, var = %.5f" % (lowest.osd_id, lowest.var_new)
     txt += ", highest osd_id = %s, var = %.5f" % (highest.osd_id, highest.var_new)
-    txt += ", spread = %.5f, max_spread = %.5f" % (spread, max_spread)
+    txt += ", oload = %.5f" % (args.oload)
     logger.info(txt)
 
     adjustment_made = False
