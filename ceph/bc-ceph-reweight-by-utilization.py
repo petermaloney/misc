@@ -373,6 +373,52 @@ def adjust():
     return adjustment_made
 
 
+def write_backup_file(f):
+    for osd in osds.values():
+        f.write("%s %s\n" % (osd.osd_id, osd.reweight))
+
+
+def restore_backup_file(f):
+    while True:
+        line = f.readline()
+        if not line:
+            break
+        osd_id, reweight = line.split()
+        osd_id = int(osd_id)
+        reweight = float(reweight)
+
+        if osd_id not in osds:
+            logger.info("osd not found: osd_id = %s" % osd_id)
+            continue
+        if osds[osd_id].reweight == reweight:
+            if logger.isEnabledFor(logging.VERBOSE):
+                logger.verbose("osd weight is the same: osd_id = %s" % osd_id)
+            continue
+        logger.info("Doing reweight: osd_id = %s, reweight = %s -> %s" % (osd_id, osds[osd_id].reweight, reweight))
+
+        if not args.dry_run:
+            ceph_osd_reweight(osd_id, reweight)
+
+
+def write_backup():
+    global args
+
+    if args.backup == "-":
+        write_backup_file(sys.stdout)
+    else:
+        with open(args.backup, "w") as f:
+            write_backup_file(f)
+
+def restore_backup():
+    global args
+
+    if args.restore == "-":
+        restore_backup_file(sys.stdin)
+    else:
+        with open(args.restore, "r") as f:
+            restore_backup_file(f)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Reweight OSDs so they have closer to equal space used.')
     parser.add_argument('-d', '--debug', action='store_const', const=True,
@@ -396,6 +442,11 @@ if __name__ == "__main__":
     parser.add_argument('-n', '--dry-run', action='store_const', const=True, default=False,
                     help='if combined with --adjust, go through all the adjustment code but don\'t actually adjust')
     
+    parser.add_argument('-b', '--backup', action='store', default=None,
+                    help='write reweights to a file (or - for stdout) before other actions')
+    parser.add_argument('-B', '--restore', action='store', default=None,
+                    help='restore reweights from a file (or - for stdin), after backup, and before other actions')
+    
     parser.add_argument('-o', '--oload', default=1.03, action='store', type=float,
                     help='minimum var before reweight (default 1.03)')
     parser.add_argument('-s', '--step', default=0.03, action='store', type=float,
@@ -414,8 +465,8 @@ if __name__ == "__main__":
         logger.error("oload must be greater than 1")
         exit(1)
 
-    if not args.report and not args.report_short and not args.adjust:
-        logger.error("Either report or adjust must be set")
+    if not args.report and not args.report_short and not args.adjust and not args.backup and not args.restore:
+        logger.error("Either report, adjust, backup or restore must be set")
         exit(1)
     
     if args.report_short:
@@ -430,6 +481,8 @@ if __name__ == "__main__":
     else:
         logger.setLevel(logging.INFO)
 
+    did_backup = False
+    
     while True:
         try:
             refresh_all()
@@ -443,6 +496,15 @@ if __name__ == "__main__":
             time.sleep(5)
             continue
         
+        if not did_backup:
+            if args.backup:
+                write_backup()
+
+            if args.restore:
+                restore_backup()
+
+            did_backup = True
+
         if args.report:
             print_report()
 
