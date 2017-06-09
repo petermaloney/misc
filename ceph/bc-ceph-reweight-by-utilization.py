@@ -292,17 +292,17 @@ def print_report():
     
     if args.verbose:
         # all osds and columns
-        print("%-3s %-7s %-8s %-7s %-14s %-7s %-7s %-14s %-7s" % (
+        print("%-6s %-7s %-8s %-7s %-14s %-7s %-7s %-14s %-7s" % (
             "osd_id", "weight", "reweight", "pgs_old", "bytes_old", "var_old", "pgs_new", "bytes_new", "var_new"))
         for osd in osds_filtered:
-            print("%3d %7.5f %8.5f %7d %14d %7.5f %7d %14d %7.5f" % 
+            print("%6d %7.5f %8.5f %7d %14d %7.5f %7d %14d %7.5f" % 
                 (osd.osd_id, osd.weight, osd.reweight, osd.pgs_old, osd.bytes_old, osd.var_old, osd.pgs_new, osd.bytes_new, osd.var_new))
     else:
-        print("%-3s %-7s %-8s %-14s %-7s %-14s %-7s" % (
+        print("%-6s %-7s %-8s %-14s %-7s %-14s %-7s" % (
             "osd_id", "weight", "reweight", "bytes_old", "var_old", "bytes_new", "var_new"))
 
         for osd in osds_filtered:
-            print("%3d %7.5f %8.5f %14d %7.5f %14d %7.5f" % 
+            print("%6d %7.5f %8.5f %14d %7.5f %14d %7.5f" % 
                 (osd.osd_id, osd.weight, osd.reweight, osd.bytes_old, osd.var_old, osd.bytes_new, osd.var_new))
         
 
