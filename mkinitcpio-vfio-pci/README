@@ -5,10 +5,23 @@ The cmdline should have something like this, where the numbers are pci ids from 
 
 Unlike pci-stub, it uses pci id, not vendor:device id, so that way it is unique, but possibly unpredictable sometimes, eg. kernel acs quirks updates. I created it because I have multiple of the same card, and one is in the kvm host.
 
+===============
+installation
+===============
+    - install the hook: sudo ./install.sh
+    - add to the kernel cmdline (eg. in /etc/default/grub, or in a custom /etc/grub.d/08_yourscript), which should include running update-grub
+    - rebuild the initcpio (eg. mkinitcpio -p linux412)
+    - reboot
+    - look with lspci -k to see if vfio-pci is bound correctly
 
-make a test environment with:
+==========================
+for developing this script
+==========================
+
+instead of rebooting to test, make a test environment with:
     mkdir /tmp/cpio; cd /tmp/cpio
-    gunzip -c /boot/initramfs-4.1.6-1-grsec-kvm-host-x86_64.img | cpio -iv
+    gunzip -c /boot/initramfs-linux412-x86_64.img | cpio -iv
     for d in dev proc sys; do mount -o bind /$d /tmp/cpio/$d; done
     chroot /tmp/cpio/ ash
 
+Now you are in a chroot that is like the initramfs prompt like it gives you when the boot fails, so you can run the script with all the same files. For example this verifies that awk is available to the initramfs. (then figure out a way to give it the kernel cmdline... TODO: document that)
