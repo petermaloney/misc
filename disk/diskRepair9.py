@@ -168,7 +168,7 @@ def get_devices(args):
             # this arg is a path
             dev_path = arg
         else:
-            raise Exception("device %s doesn't exist" % (arg)
+            raise Exception("device %s doesn't exist" % (arg))
 
         dev_path_r = os.path.realpath(dev_path)
         if dev_path_r.startswith("/dev/dm-"):
